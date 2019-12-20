@@ -1,0 +1,21 @@
+[package]
+name = "wgpu-bench"
+version = "0.1.0"
+description = "WebGPU native benchmarks"
+repository = "https://github.com/kvark/wgpu-bench"
+authors = ["Dzmitry Malyshau"]
+readme = "README.md"
+keywords = ["wgpu", "graphics", "benchmark", "WebGPU"]
+license = "MIT"
+edition = "2018"
+publish = false
+
+[dependencies]
+wgpu = { git = "https://github.com/gfx-rs/wgpu-rs" }
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "overhead"
+harness = false
