@@ -189,7 +189,7 @@ criterion_group!(
         ::default()
         .warm_up_time(std::time::Duration::from_millis(200))
         .measurement_time(std::time::Duration::from_millis(1000))
-        .nresamples(50);
+        .sample_size(50);
     targets = initialization, resource_creation, command_encoding, queue_operation
 );
 criterion_main!(overhead);
