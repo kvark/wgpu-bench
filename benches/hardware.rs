@@ -36,7 +36,7 @@ fn load_shader(name: &str) -> Vec<u32> {
 }
 
 fn pixel_write(c: &mut criterion::Criterion) {
-    let(device, queue) = init();
+    let (device, queue) = init();
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         bind_group_layouts: &[],
@@ -92,32 +92,31 @@ fn pixel_write(c: &mut criterion::Criterion) {
         usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
     });
     let pass_desc = wgpu::RenderPassDescriptor {
-        color_attachments: &[
-            wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &texture.create_default_view(),
-                resolve_target: None,
-                load_op: wgpu::LoadOp::Clear,
-                store_op: wgpu::StoreOp::Store,
-                clear_color: wgpu::Color::BLACK,
-            },
-        ],
+        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+            attachment: &texture.create_default_view(),
+            resolve_target: None,
+            load_op: wgpu::LoadOp::Clear,
+            store_op: wgpu::StoreOp::Store,
+            clear_color: wgpu::Color::BLACK,
+        }],
         depth_stencil_attachment: None,
     };
 
     //TODO: takes too long, need GPU timers
     if false {
-        c.bench_function("pixel write", |b| b.iter(|| {
-            let mut command_encoder = device.create_command_encoder(
-                &wgpu::CommandEncoderDescriptor::default()
-            );
-            {
-                let mut pass = command_encoder.begin_render_pass(&pass_desc);
-                pass.set_pipeline(&pipeline);
-                pass.draw(0..4, 0..200);
-            }
-            queue.submit(iter::once(command_encoder.finish()));
-            device.poll(wgpu::Maintain::Wait);
-        }));
+        c.bench_function("pixel write", |b| {
+            b.iter(|| {
+                let mut command_encoder =
+                    device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+                {
+                    let mut pass = command_encoder.begin_render_pass(&pass_desc);
+                    pass.set_pipeline(&pipeline);
+                    pass.draw(0..4, 0..200);
+                }
+                queue.submit(iter::once(command_encoder.finish()));
+                device.poll(wgpu::Maintain::Wait);
+            })
+        });
     }
 }
 

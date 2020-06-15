@@ -28,10 +28,13 @@ fn initialization(c: &mut criterion::Criterion) {
 
     //TODO: requires proper device destruction
     if false {
-        c.bench_function("Adapter::request_device", |b| b.iter(|| {
-            let device_future = adapter.request_device(&wgpu::DeviceDescriptor::default(), None);
-            let _ = executor::block_on(device_future).unwrap();
-        }));
+        c.bench_function("Adapter::request_device", |b| {
+            b.iter(|| {
+                let device_future =
+                    adapter.request_device(&wgpu::DeviceDescriptor::default(), None);
+                let _ = executor::block_on(device_future).unwrap();
+            })
+        });
     }
 }
 
@@ -112,15 +115,13 @@ fn command_encoding(c: &mut criterion::Criterion) {
     };
     let texture = device.create_texture(&texture_desc);
     let pass_desc = wgpu::RenderPassDescriptor {
-        color_attachments: &[
-            wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &texture.create_default_view(),
-                resolve_target: None,
-                load_op: wgpu::LoadOp::Clear,
-                store_op: wgpu::StoreOp::Store,
-                clear_color: wgpu::Color::BLACK,
-            },
-        ],
+        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+            attachment: &texture.create_default_view(),
+            resolve_target: None,
+            load_op: wgpu::LoadOp::Clear,
+            store_op: wgpu::StoreOp::Store,
+            clear_color: wgpu::Color::BLACK,
+        }],
         depth_stencil_attachment: None,
     };
 
@@ -129,9 +130,8 @@ fn command_encoding(c: &mut criterion::Criterion) {
 
     {
         c.bench_function("CommandEncoder::begin_render_pass", |b| {
-            let mut command_encoder = device.create_command_encoder(
-                &wgpu::CommandEncoderDescriptor::default()
-            );
+            let mut command_encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
             b.iter(|| {
                 let _ = command_encoder.begin_render_pass(&pass_desc);
             });
@@ -140,9 +140,8 @@ fn command_encoding(c: &mut criterion::Criterion) {
     }
     {
         c.bench_function("CommandEncoder::begin_compute_pass", |b| {
-            let mut command_encoder = device.create_command_encoder(
-                &wgpu::CommandEncoderDescriptor::default()
-            );
+            let mut command_encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
             b.iter(|| {
                 let _ = command_encoder.begin_compute_pass();
             });
@@ -155,11 +154,14 @@ fn command_encoding(c: &mut criterion::Criterion) {
     {
         let buf_src = device.create_buffer(&buffer_desc);
         let buf_dst = device.create_buffer(&buffer_desc);
-        let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        let mut command_encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
-        c.bench_function("CommandEncoder::copy_buffer_to_buffer", |b| b.iter(|| {
-            command_encoder.copy_buffer_to_buffer(&buf_src, 0, &buf_dst, 0, buffer_size);
-        }));
+        c.bench_function("CommandEncoder::copy_buffer_to_buffer", |b| {
+            b.iter(|| {
+                command_encoder.copy_buffer_to_buffer(&buf_src, 0, &buf_dst, 0, buffer_size);
+            })
+        });
 
         queue.submit(iter::once(command_encoder.finish()));
     }
@@ -179,14 +181,18 @@ fn queue_operation(c: &mut criterion::Criterion) {
     let device_future = adapter.request_device(&wgpu::DeviceDescriptor::default(), None);
     let (device, queue) = executor::block_on(device_future).unwrap();
 
-    c.bench_function("Queue::submit(empty)", |b| b.iter(|| {
-        queue.submit(None);
-    }));
+    c.bench_function("Queue::submit(empty)", |b| {
+        b.iter(|| {
+            queue.submit(None);
+        })
+    });
 
-    c.bench_function("Queue::submit(dummy_command_buffer)", |b| b.iter(|| {
-        let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        queue.submit(iter::once(encoder.finish()));
-    }));
+    c.bench_function("Queue::submit(dummy_command_buffer)", |b| {
+        b.iter(|| {
+            let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+            queue.submit(iter::once(encoder.finish()));
+        })
+    });
 }
 
 criterion_group!(
