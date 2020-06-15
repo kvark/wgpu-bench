@@ -1,3 +1,7 @@
+/*!
+    Benchmark of GPU operations.
+!*/
+
 #[macro_use]
 extern crate criterion;
 

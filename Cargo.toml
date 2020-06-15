@@ -11,15 +11,19 @@ edition = "2018"
 publish = false
 
 [dependencies]
-wgpu = { git = "https://github.com/gfx-rs/wgpu-rs" }
 futures = "0.3"
 glsl-to-spirv = "0.1"
+wgpu = { git = "https://github.com/gfx-rs/wgpu-rs" }
 
 [dev-dependencies]
 criterion = "0.3"
 
 [[bench]]
 name = "overhead"
+harness = false
+
+[[bench]]
+name = "allocation"
 harness = false
 
 [[bench]]

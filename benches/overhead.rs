@@ -1,3 +1,7 @@
+/*!
+    Benchmark of CPU function overhead.
+!*/
+
 #[macro_use]
 extern crate criterion;
 
@@ -43,21 +47,20 @@ fn resource_creation(c: &mut criterion::Criterion) {
 
     //Warning: Metal/Intel hangs after creating 200k objects
 
-    {
+    c.bench_function("Device::create_buffer", |b| {
         let desc = wgpu::BufferDescriptor {
             label: None,
             size: 16,
             usage: wgpu::BufferUsage::VERTEX,
             mapped_at_creation: false,
         };
-        c.bench_function("Device::create_buffer", |b| {
-            b.iter(|| {
-                let _ = device.create_buffer(&desc);
-            });
-            device.poll(wgpu::Maintain::Wait);
+        b.iter(|| {
+            let _ = device.create_buffer(&desc);
         });
-    }
-    {
+        device.poll(wgpu::Maintain::Wait);
+    });
+
+    c.bench_function("Device::create_texture", |b| {
         let desc = wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
@@ -71,23 +74,20 @@ fn resource_creation(c: &mut criterion::Criterion) {
             format: wgpu::TextureFormat::R8Unorm,
             usage: wgpu::TextureUsage::SAMPLED,
         };
-        c.bench_function("Device::create_texture", |b| {
-            b.iter(|| {
-                let _ = device.create_texture(&desc);
-            });
-            device.poll(wgpu::Maintain::Wait);
-        });
-    }
 
-    {
-        let desc = wgpu::SamplerDescriptor::default();
-        c.bench_function("Device::create_sampler", |b| {
-            b.iter(|| {
-                let _ = device.create_sampler(&desc);
-            });
-            device.poll(wgpu::Maintain::Wait);
+        b.iter(|| {
+            let _ = device.create_texture(&desc);
         });
-    }
+        device.poll(wgpu::Maintain::Wait);
+    });
+
+    c.bench_function("Device::create_sampler", |b| {
+        let desc = wgpu::SamplerDescriptor::default();
+        b.iter(|| {
+            let _ = device.create_sampler(&desc);
+        });
+        device.poll(wgpu::Maintain::Wait);
+    });
 }
 
 fn command_encoding(c: &mut criterion::Criterion) {
@@ -128,43 +128,36 @@ fn command_encoding(c: &mut criterion::Criterion) {
     //Warning: each render pass ends up creating a new command buffer,
     // thus hitting the queue limit of command buffers eventually.
 
-    {
-        c.bench_function("CommandEncoder::begin_render_pass", |b| {
-            let mut command_encoder =
-                device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-            b.iter(|| {
-                let _ = command_encoder.begin_render_pass(&pass_desc);
-            });
-            queue.submit(iter::once(command_encoder.finish()));
+    c.bench_function("CommandEncoder::begin_render_pass", |b| {
+        let mut command_encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        b.iter(|| {
+            let _ = command_encoder.begin_render_pass(&pass_desc);
         });
-    }
-    {
-        c.bench_function("CommandEncoder::begin_compute_pass", |b| {
-            let mut command_encoder =
-                device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-            b.iter(|| {
-                let _ = command_encoder.begin_compute_pass();
-            });
-            queue.submit(iter::once(command_encoder.finish()));
+        queue.submit(iter::once(command_encoder.finish()));
+    });
+
+    c.bench_function("CommandEncoder::begin_compute_pass", |b| {
+        let mut command_encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        b.iter(|| {
+            let _ = command_encoder.begin_compute_pass();
         });
-    }
+        queue.submit(iter::once(command_encoder.finish()));
+    });
 
     //Warning: if too much work is submitted, GPU will time out.
 
-    {
+    c.bench_function("CommandEncoder::copy_buffer_to_buffer", |b| {
         let buf_src = device.create_buffer(&buffer_desc);
         let buf_dst = device.create_buffer(&buffer_desc);
         let mut command_encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-
-        c.bench_function("CommandEncoder::copy_buffer_to_buffer", |b| {
-            b.iter(|| {
-                command_encoder.copy_buffer_to_buffer(&buf_src, 0, &buf_dst, 0, buffer_size);
-            })
+        b.iter(|| {
+            command_encoder.copy_buffer_to_buffer(&buf_src, 0, &buf_dst, 0, buffer_size);
         });
-
         queue.submit(iter::once(command_encoder.finish()));
-    }
+    });
 }
 
 fn queue_operation(c: &mut criterion::Criterion) {
