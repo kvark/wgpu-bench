@@ -1,55 +1,67 @@
 #[macro_use]
 extern crate criterion;
 
-fn initialization(c: &mut criterion::Criterion) {
-    let adapter = wgpu::Adapter::request(
-        &wgpu::RequestAdapterOptions::default(),
+use futures::executor;
+use std::iter;
+
+fn init_adapter() -> wgpu::Adapter {
+    let instance = wgpu::Instance::new();
+    let adapter_future = instance.request_adapter(
+        &wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::Default,
+            compatible_surface: None,
+        },
+        wgpu::UnsafeExtensions::disallow(),
         wgpu::BackendBit::PRIMARY,
-    ).unwrap();
+    );
+    executor::block_on(adapter_future).unwrap()
+}
+
+fn init_device() -> (wgpu::Device, wgpu::Queue) {
+    let adapter = init_adapter();
+    let device_future = adapter.request_device(&wgpu::DeviceDescriptor::default(), None);
+    executor::block_on(device_future).unwrap()
+}
+
+fn initialization(c: &mut criterion::Criterion) {
+    let adapter = init_adapter();
 
     //TODO: requires proper device destruction
     if false {
         c.bench_function("Adapter::request_device", |b| b.iter(|| {
-            let _ = adapter.request_device(&wgpu::DeviceDescriptor::default());
+            let device_future = adapter.request_device(&wgpu::DeviceDescriptor::default(), None);
+            let _ = executor::block_on(device_future).unwrap();
         }));
     }
 }
 
 fn resource_creation(c: &mut criterion::Criterion) {
-    let adapter = wgpu::Adapter::request(
-        &wgpu::RequestAdapterOptions::default(),
-        wgpu::BackendBit::PRIMARY,
-    ).unwrap();
-    let (device, _) = adapter.request_device(&wgpu::DeviceDescriptor::default());
+    let (device, _) = init_device();
 
     //Warning: Metal/Intel hangs after creating 200k objects
 
     {
         let desc = wgpu::BufferDescriptor {
+            label: None,
             size: 16,
             usage: wgpu::BufferUsage::VERTEX,
+            mapped_at_creation: false,
         };
         c.bench_function("Device::create_buffer", |b| {
             b.iter(|| {
                 let _ = device.create_buffer(&desc);
             });
-            device.poll(true);
-        });
-        c.bench_function("Device::create_buffer_mapped", |b| {
-            b.iter(|| {
-                let _ = device.create_buffer_mapped(16, wgpu::BufferUsage::VERTEX).finish();
-            });
-            device.poll(true);
+            device.poll(wgpu::Maintain::Wait);
         });
     }
     {
         let desc = wgpu::TextureDescriptor {
+            label: None,
             size: wgpu::Extent3d {
                 width: 4,
                 height: 4,
                 depth: 1,
             },
-            array_layer_count: 1,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -60,51 +72,38 @@ fn resource_creation(c: &mut criterion::Criterion) {
             b.iter(|| {
                 let _ = device.create_texture(&desc);
             });
-            device.poll(true);
+            device.poll(wgpu::Maintain::Wait);
         });
     }
 
     {
-        let desc = wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::Repeat,
-            address_mode_v: wgpu::AddressMode::Repeat,
-            address_mode_w: wgpu::AddressMode::Repeat,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            lod_min_clamp: 0.0,
-            lod_max_clamp: 10.0,
-            compare_function: wgpu::CompareFunction::Always,
-        };
-
+        let desc = wgpu::SamplerDescriptor::default();
         c.bench_function("Device::create_sampler", |b| {
             b.iter(|| {
                 let _ = device.create_sampler(&desc);
             });
-            device.poll(true);
+            device.poll(wgpu::Maintain::Wait);
         });
     }
 }
 
 fn command_encoding(c: &mut criterion::Criterion) {
-    let adapter = wgpu::Adapter::request(
-        &wgpu::RequestAdapterOptions::default(),
-        wgpu::BackendBit::PRIMARY,
-    ).unwrap();
-    let (device, mut queue) = adapter.request_device(&wgpu::DeviceDescriptor::default());
+    let (device, queue) = init_device();
 
     let buffer_size = 16;
     let buffer_desc = wgpu::BufferDescriptor {
+        label: None,
         size: buffer_size,
         usage: wgpu::BufferUsage::COPY_SRC | wgpu::BufferUsage::COPY_DST,
+        mapped_at_creation: false,
     };
     let texture_desc = wgpu::TextureDescriptor {
+        label: None,
         size: wgpu::Extent3d {
             width: 4,
             height: 4,
             depth: 1,
         },
-        array_layer_count: 1,
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -136,7 +135,7 @@ fn command_encoding(c: &mut criterion::Criterion) {
             b.iter(|| {
                 let _ = command_encoder.begin_render_pass(&pass_desc);
             });
-            queue.submit(&[command_encoder.finish()]);
+            queue.submit(iter::once(command_encoder.finish()));
         });
     }
     {
@@ -147,7 +146,7 @@ fn command_encoding(c: &mut criterion::Criterion) {
             b.iter(|| {
                 let _ = command_encoder.begin_compute_pass();
             });
-            queue.submit(&[command_encoder.finish()]);
+            queue.submit(iter::once(command_encoder.finish()));
         });
     }
 
@@ -162,24 +161,31 @@ fn command_encoding(c: &mut criterion::Criterion) {
             command_encoder.copy_buffer_to_buffer(&buf_src, 0, &buf_dst, 0, buffer_size);
         }));
 
-        queue.submit(&[command_encoder.finish()]);
+        queue.submit(iter::once(command_encoder.finish()));
     }
 }
 
 fn queue_operation(c: &mut criterion::Criterion) {
-    let adapter = wgpu::Adapter::request(
-        &wgpu::RequestAdapterOptions::default(),
+    let instance = wgpu::Instance::new();
+    let adapter_future = instance.request_adapter(
+        &wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::Default,
+            compatible_surface: None,
+        },
+        wgpu::UnsafeExtensions::disallow(),
         wgpu::BackendBit::PRIMARY,
-    ).unwrap();
-    let (device, mut queue) = adapter.request_device(&wgpu::DeviceDescriptor::default());
+    );
+    let adapter = executor::block_on(adapter_future).unwrap();
+    let device_future = adapter.request_device(&wgpu::DeviceDescriptor::default(), None);
+    let (device, queue) = executor::block_on(device_future).unwrap();
 
     c.bench_function("Queue::submit(empty)", |b| b.iter(|| {
-        queue.submit(&[]);
+        queue.submit(None);
     }));
 
     c.bench_function("Queue::submit(dummy_command_buffer)", |b| b.iter(|| {
         let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
-        queue.submit(&[encoder.finish()]);
+        queue.submit(iter::once(encoder.finish()));
     }));
 }
 

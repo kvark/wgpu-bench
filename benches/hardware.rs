@@ -1,6 +1,24 @@
 #[macro_use]
 extern crate criterion;
 
+use futures::executor;
+use std::iter;
+
+fn init() -> (wgpu::Device, wgpu::Queue) {
+    let instance = wgpu::Instance::new();
+    let adapter_future = instance.request_adapter(
+        &wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::Default,
+            compatible_surface: None,
+        },
+        wgpu::UnsafeExtensions::disallow(),
+        wgpu::BackendBit::PRIMARY,
+    );
+    let adapter = executor::block_on(adapter_future).unwrap();
+    let device_future = adapter.request_device(&wgpu::DeviceDescriptor::default(), None);
+    executor::block_on(device_future).unwrap()
+}
+
 fn load_shader(name: &str) -> Vec<u32> {
     let ty = if name.ends_with(".vert") {
         glsl_to_spirv::ShaderType::Vertex
@@ -18,13 +36,7 @@ fn load_shader(name: &str) -> Vec<u32> {
 }
 
 fn pixel_write(c: &mut criterion::Criterion) {
-    let adapter = wgpu::Adapter::request(
-        &wgpu::RequestAdapterOptions::default(),
-        wgpu::BackendBit::PRIMARY,
-    ).unwrap();
-    let (device, mut queue) = adapter.request_device(
-        &wgpu::DeviceDescriptor::default()
-    );
+    let(device, queue) = init();
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         bind_group_layouts: &[],
@@ -57,20 +69,22 @@ fn pixel_write(c: &mut criterion::Criterion) {
             write_mask: wgpu::ColorWrite::ALL,
         }],
         depth_stencil_state: None,
-        index_format: wgpu::IndexFormat::Uint16,
-        vertex_buffers: &[],
+        vertex_state: wgpu::VertexStateDescriptor {
+            index_format: wgpu::IndexFormat::Uint16,
+            vertex_buffers: &[],
+        },
         sample_count: 1,
         sample_mask: !0,
         alpha_to_coverage_enabled: false,
     });
 
     let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
         size: wgpu::Extent3d {
             width: 4096,
             height: 4096,
             depth: 1,
         },
-        array_layer_count: 1,
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -101,8 +115,8 @@ fn pixel_write(c: &mut criterion::Criterion) {
                 pass.set_pipeline(&pipeline);
                 pass.draw(0..4, 0..200);
             }
-            queue.submit(&[command_encoder.finish()]);
-            device.poll(true);
+            queue.submit(iter::once(command_encoder.finish()));
+            device.poll(wgpu::Maintain::Wait);
         }));
     }
 }
